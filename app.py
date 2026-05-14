@@ -17,7 +17,12 @@ import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
 
 import FinanceDataReader as fdr
-import OpenDartReader
+try:
+    from opendartreader import OpenDartReader
+except ImportError:
+    import OpenDartReader as _odr_module
+    OpenDartReader = _odr_module.OpenDartReader if hasattr(_odr_module, "OpenDartReader") else _odr_module
+    
 import yfinance as yf
 
 # ============================================================
