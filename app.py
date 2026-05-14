@@ -114,6 +114,35 @@ init_db()
 # ============================================================
 @st.cache_data(ttl=24 * 3600, show_spinner=False)
 def get_listings(market: str) -> pd.DataFrame:
+    # KRX는 pykrx로 우선 시도 (FDR보다 안정적), 실패 시 FDR fallback
+    if market == "KRX":
+        try:
+            from pykrx import stock
+            today = datetime.now().strftime("%Y%m%d")
+            tickers_kospi  = stock.get_market_ticker_list(today, market="KOSPI")
+            tickers_kosdaq = stock.get_market_ticker_list(today, market="KOSDAQ")
+            rows = []
+            for t in tickers_kospi:
+                rows.append({"Code": t, "Name": stock.get_market_ticker_name(t),
+                             "Market": "KOSPI", "Marcap": None})
+            for t in tickers_kosdaq:
+                rows.append({"Code": t, "Name": stock.get_market_ticker_name(t),
+                             "Market": "KOSDAQ", "Marcap": None})
+            df = pd.DataFrame(rows)
+            try:
+                cap = stock.get_market_cap(today)
+                df = df.merge(cap[["시가총액"]].rename(columns={"시가총액": "Marcap"}),
+                              left_on="Code", right_index=True, how="left",
+                              suffixes=("", "_y"))
+                if "Marcap_y" in df.columns:
+                    df["Marcap"] = df["Marcap_y"].combine_first(df["Marcap"])
+                    df = df.drop(columns=["Marcap_y"])
+            except Exception:
+                pass
+            return df
+        except Exception as e:
+            st.info(f"pykrx 실패, FDR로 재시도: {e}")
+            return fdr.StockListing(market)
     return fdr.StockListing(market)
 
 @st.cache_data(ttl=3600, show_spinner=False)
