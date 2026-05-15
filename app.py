@@ -114,73 +114,7 @@ init_db()
 # ============================================================
 @st.cache_data(ttl=24 * 3600, show_spinner=False)
 def get_listings(market: str) -> pd.DataFrame:
-    """
-    KRX 종목 목록: pykrx → KRX 공식 CSV → FDR 순으로 시도.
-    """
-    if market == "KRX":
-        # ---- 1) pykrx ----
-        try:
-            from pykrx import stock
-            today = datetime.now().strftime("%Y%m%d")
-            tickers_kospi  = stock.get_market_ticker_list(today, market="KOSPI")
-            tickers_kosdaq = stock.get_market_ticker_list(today, market="KOSDAQ")
-            rows = []
-            for t in tickers_kospi:
-                rows.append({"Code": t, "Name": stock.get_market_ticker_name(t),
-                             "Market": "KOSPI", "Marcap": None})
-            for t in tickers_kosdaq:
-                rows.append({"Code": t, "Name": stock.get_market_ticker_name(t),
-                             "Market": "KOSDAQ", "Marcap": None})
-            df = pd.DataFrame(rows)
-            try:
-                cap = stock.get_market_cap(today)
-                df = df.merge(cap[["시가총액"]].rename(columns={"시가총액": "Marcap"}),
-                              left_on="Code", right_index=True, how="left",
-                              suffixes=("", "_y"))
-                if "Marcap_y" in df.columns:
-                    df["Marcap"] = df["Marcap_y"].combine_first(df["Marcap"])
-                    df = df.drop(columns=["Marcap_y"])
-            except Exception:
-                pass
-            return df
-        except Exception as e:
-            st.info(f"pykrx 실패, KRX 공식 데이터 시도: {e}")
-
-        # ---- 2) KRX 정보데이터시스템 공식 CSV (otp + download) ----
-        try:
-            import requests, io
-            session = requests.Session()
-            session.headers.update({
-                "User-Agent": "Mozilla/5.0",
-                "Referer": "http://data.krx.co.kr/",
-            })
-            otp_url = "http://data.krx.co.kr/comm/fileDn/GenerateOTP/generate.cmd"
-            dl_url  = "http://data.krx.co.kr/comm/fileDn/download_csv/download.cmd"
-            otp_payload = {
-                "mktId": "ALL",
-                "trdDd": datetime.now().strftime("%Y%m%d"),
-                "money": "1",
-                "csvxls_isNo": "false",
-                "name": "fileDown",
-                "url": "dbms/MDC/STAT/standard/MDCSTAT01501",
-            }
-            otp = session.post(otp_url, data=otp_payload, timeout=10).text
-            csv_bytes = session.post(dl_url, data={"code": otp}, timeout=15).content
-            raw = pd.read_csv(io.BytesIO(csv_bytes), encoding="euc-kr")
-            # 컬럼명: 종목코드, 종목명, 시장구분, 시가총액 등
-            df = pd.DataFrame({
-                "Code":   raw["종목코드"].astype(str).str.zfill(6),
-                "Name":   raw["종목명"],
-                "Market": raw.get("시장구분", "KRX"),
-                "Marcap": pd.to_numeric(raw.get("시가총액"), errors="coerce"),
-            })
-            return df
-        except Exception as e:
-            st.info(f"KRX 공식 데이터 실패, FDR 시도: {e}")
-
-        # ---- 3) FDR ----
-        return fdr.StockListing(market)
-
+    """market: 'KRX', 'NASDAQ', 'NYSE' 등"""
     return fdr.StockListing(market)
 
 @st.cache_data(ttl=3600, show_spinner=False)
